@@ -2,12 +2,11 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-const VERIFY_TOKEN = "mytoken123";
-const WHATSAPP_TOKEN = "YAHAN_APNA_ACCESS_TOKEN_DAALO";
-const ANTHROPIC_API_KEY = "YAHAN_APNA_CLAUDE_KEY_DAALO";
-const PHONE_NUMBER_ID = "938913972648319";
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "mytoken123";
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
-// Webhook verify
 app.get('/webhook', (req, res) => {
   if (req.query['hub.verify_token'] === VERIFY_TOKEN) {
     res.send(req.query['hub.challenge']);
@@ -16,19 +15,23 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// Message receive
 app.post('/webhook', async (req, res) => {
-  const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-  if (message?.type === 'text') {
-    const userText = message.text.body;
-    const phoneNumber = message.from;
-    const claudeReply = await askClaude(userText);
-    await sendWhatsApp(phoneNumber, claudeReply);
+  try {
+    const message = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    if (message?.type === 'text') {
+      const userText = message.text.body;
+      const phoneNumber = message.from;
+      console.log('Message received:', userText);
+      const claudeReply = await askClaude(userText);
+      console.log('Claude reply:', claudeReply);
+      await sendWhatsApp(phoneNumber, claudeReply);
+    }
+  } catch (err) {
+    console.error('Error:', err);
   }
   res.sendStatus(200);
 });
 
-// Claude API
 async function askClaude(userMessage) {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -44,12 +47,15 @@ async function askClaude(userMessage) {
     })
   });
   const data = await response.json();
-  return data.content[0].text;
+  console.log('Claude API response:', JSON.stringify(data));
+  if (data.content && data.content[0]) {
+    return data.content[0].text;
+  }
+  return "Sorry, kuch error hua!";
 }
 
-// WhatsApp bhejo
 async function sendWhatsApp(to, message) {
-  await fetch(`https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`, {
+  const response = await fetch(`https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
@@ -61,6 +67,8 @@ async function sendWhatsApp(to, message) {
       text: { body: message }
     })
   });
+  const data = await response.json();
+  console.log('WhatsApp response:', JSON.stringify(data));
 }
 
 app.listen(3000, () => console.log('Server running!'));
