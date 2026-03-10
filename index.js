@@ -4,7 +4,7 @@ app.use(express.json());
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "mytoken123";
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
 const SYSTEM_PROMPT = `Aap Kabir Industries ke WhatsApp assistant ho.
@@ -36,9 +36,9 @@ app.post('/webhook', async (req, res) => {
       const userText = message.text.body;
       const phoneNumber = message.from;
       console.log('Message received:', userText);
-      const claudeReply = await askClaude(userText);
-      console.log('Claude reply:', claudeReply);
-      await sendWhatsApp(phoneNumber, claudeReply);
+      const reply = await askOpenAI(userText);
+      console.log('OpenAI reply:', reply);
+      await sendWhatsApp(phoneNumber, reply);
     }
   } catch (err) {
     console.error('Error:', err);
@@ -46,25 +46,26 @@ app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
 });
 
-async function askClaude(userMessage) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+async function askOpenAI(userMessage) {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01"
+      "Authorization": `Bearer ${OPENAI_API_KEY}`
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "gpt-3.5-turbo",
       max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }]
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userMessage }
+      ]
     })
   });
   const data = await response.json();
-  console.log('Claude API response:', JSON.stringify(data));
-  if (data.content && data.content[0]) {
-    return data.content[0].text;
+  console.log('OpenAI response:', JSON.stringify(data));
+  if (data.choices && data.choices[0]) {
+    return data.choices[0].message.content;
   }
   return "Sorry, kuch error hua!";
 }
